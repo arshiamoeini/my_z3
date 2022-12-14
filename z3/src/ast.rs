@@ -1578,6 +1578,16 @@ impl<'ctx> Set<'ctx> {
 }
 
 impl<'ctx> Dynamic<'ctx> {
+    pub fn new_const<S: Into<Symbol>>(ctx: &'ctx Context, name: S, sort: &Sort<'ctx>) -> Self {
+        assert_eq!(ctx, sort.ctx);
+
+        unsafe {
+            Self::wrap(ctx, {
+                Z3_mk_const(ctx.z3_ctx, name.into().as_z3_symbol(ctx), sort.z3_sort)
+            })
+        }
+    }
+    
     pub fn from_ast(ast: &dyn Ast<'ctx>) -> Self {
         unsafe { Self::wrap(ast.get_ctx(), ast.get_z3_ast()) }
     }
