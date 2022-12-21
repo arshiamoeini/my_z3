@@ -71,6 +71,11 @@ fn build_z3() {
         cfg.cxxflag("-D_WINDOWS");
     }
 
+    if env::var("TARGET").unwrap() == "wasm32-unknown-emscripten" {
+        cfg.cxxflag("-fexceptions");
+        println!("cargo:rustc-link-arg=z3=-fexceptions");
+    }
+
     let dst = cfg.build();
 
     // Z3 needs a C++ standard library. Customize which one we use with the
