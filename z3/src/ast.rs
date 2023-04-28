@@ -76,6 +76,11 @@ pub struct Datatype<'ctx> {
     pub(crate) z3_ast: Z3_ast,
 }
 
+pub struct Seq<'ctx> {
+    pub(crate) ctx: &'ctx Context,
+    pub(crate) z3_ast: Z3_ast,
+}
+
 /// A dynamically typed [`Ast`] node.
 pub struct Dynamic<'ctx> {
     pub(crate) ctx: &'ctx Context,
@@ -556,6 +561,8 @@ impl_ast!(Array);
 impl_from_try_into_dynamic!(Array, as_array);
 impl_ast!(Set);
 impl_from_try_into_dynamic!(Set, as_set);
+impl_ast!(Seq);
+impl_from_try_into_dynamic!(Seq, as_seq);
 impl_ast!(Regexp);
 
 impl<'ctx> Int<'ctx> {
@@ -1618,6 +1625,99 @@ impl<'ctx> Set<'ctx> {
         difference(Z3_mk_set_difference, Self);
     }
 }
+impl<'ctx> Seq<'ctx> {
+    pub fn new_const<S: Into<Symbol>>(ctx: &'ctx Context, name: S, eltype: &Sort<'ctx>) -> Seq<'ctx> {
+        let sort = Sort::seq(ctx, eltype);
+        unsafe {
+            Self::wrap(ctx, {
+                Z3_mk_const(ctx.z3_ctx, name.into().as_z3_symbol(ctx), sort.z3_sort)
+            })
+        }
+    }
+
+    /// Creates a fresh constant using the built-in string sort
+    pub fn fresh_const(ctx: &'ctx Context, prefix: &str, eltype: &Sort<'ctx>) -> Seq<'ctx> {
+        let sort = Sort::seq(ctx, eltype);
+        unsafe {
+            Self::wrap(ctx, {
+                let pp = CString::new(prefix).unwrap();
+                let p = pp.as_ptr();
+                Z3_mk_fresh_const(ctx.z3_ctx, p, sort.z3_sort)
+            })
+        }
+    }
+
+    /// Creates a empty seq
+    pub fn empty(ctx: &'ctx Context, sort: &Sort<'ctx>) -> Seq<'ctx> {
+        unsafe { Self::wrap(ctx, Z3_mk_seq_empty(ctx.z3_ctx, sort.z3_sort)) }
+    }
+
+    //Create a unit seq
+    pub fn unit(ctx: &'ctx Context, elem: &dyn Ast<'ctx>) -> Seq<'ctx> {
+        unsafe { Self::wrap(ctx, Z3_mk_seq_unit(ctx.z3_ctx, elem.get_z3_ast()))}
+    }
+
+    /// Extract subsequence starting at `offset` of `length` from `Self`
+    pub fn subsequance(&self, offset: Int<'ctx>, length: Int<'ctx>) -> Seq<'ctx> {
+        unsafe {
+            <Seq<'ctx> >::wrap(self.ctx,{
+                Z3_mk_seq_extract(self.ctx.z3_ctx, self.z3_ast,offset.z3_ast, length.z3_ast)
+            })
+        }
+    }
+
+    /// Replace the first occurrence of `a` with `b` in `Self`
+    /// A should be sort of element of 'Self'
+    pub fn replace<A>(&self, a: &A, b: &A) -> Seq<'ctx>
+    where 
+        A: Ast<'ctx>,
+    {
+        unsafe {
+            <Seq<'ctx> >::wrap(self.ctx,{
+                Z3_mk_seq_replace(self.ctx.z3_ctx, self.z3_ast, a.get_z3_ast(), b.get_z3_ast())
+            })
+        }
+    }
+    /// Get the value at a given index in the seq.
+    pub fn at(&self, index: &Int<'ctx>) -> Dynamic<'ctx>
+    {
+        unsafe {
+            Dynamic::wrap(self.ctx, {
+                Z3_mk_seq_at(self.ctx.z3_ctx, self.z3_ast, index.get_z3_ast())
+            })
+        }
+    }
+
+    /// Return index of first occurrence of `a` in `Self` starting from `offset`
+    /// If `Self` from 'offset' does not contain `a`, then the value is -1, if `offset` is the length of `Self`, then the value is -1 as well
+    /// The function is under-specified if `offset` is negative or larger than the length of `Self`.
+    pub fn index<A>(&self, a: &A, offset: Int<'ctx>) -> Int<'ctx>
+    where
+        A: Ast<'ctx>,
+    {
+        unsafe {
+            Int::wrap(self.ctx, {
+                Z3_mk_seq_index(self.ctx.z3_ctx, self.get_z3_ast(), a.get_z3_ast(), offset.get_z3_ast())
+            })
+        }
+    }
+    
+    varop! {
+        /// Appends the argument seq to `Self`
+        concat(Z3_mk_seq_concat, Seq<'ctx>);
+    }
+    unop! {
+        length(Z3_mk_seq_length, Int<'ctx>);
+    }
+    binop! {
+        /// Checks whether `Self` contains a subsequance
+        contains(Z3_mk_seq_contains, Bool<'ctx>);
+        /// Checks whether `Self` is a prefix of the argument
+        prefix(Z3_mk_seq_prefix, Bool<'ctx>);
+        /// Checks whether `Self` is a sufix of the argument
+        suffix(Z3_mk_seq_suffix, Bool<'ctx>);
+    }
+}
 
 impl<'ctx> Dynamic<'ctx> {
     pub fn from_ast(ast: &dyn Ast<'ctx>) -> Self {
@@ -1713,6 +1813,17 @@ impl<'ctx> Dynamic<'ctx> {
         match self.sort_kind() {
             SortKind::Datatype => Some(unsafe { Datatype::wrap(self.ctx, self.z3_ast) }),
             _ => None,
+        }
+    }
+
+    /// Returns `None` if the `Dynamic` is not actually a `Seq`
+    pub fn as_seq(&self) -> Option<Seq<'ctx>> {
+        unsafe {
+            if Z3_is_seq_sort(self.ctx.z3_ctx, Z3_get_sort(self.ctx.z3_ctx, self.z3_ast)) {
+                Some(Seq::wrap(self.ctx, self.z3_ast))
+            } else {
+                None
+            }
         }
     }
 }
