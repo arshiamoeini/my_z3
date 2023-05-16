@@ -249,6 +249,32 @@ fn test_solver_new_from_smtlib2() {
 }
 
 #[test]
+fn test_seq() {
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let i = Sort::int(&ctx);
+    let e = ast::Seq::empty(&ctx, &i);
+    let u = ast::Seq::unit(&ctx, &ast::Int::from_i64(&ctx, -2));
+    let solver = Solver::new(&ctx);
+    solver.assert(&e.prefix(&u));
+    assert_eq!(solver.check(), SatResult::Sat);
+}
+
+#[test]
+fn test_lambda() {
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let i = Sort::int(&ctx);
+    let plus = ast::Array::mk_lambda(&ctx, &[&i, &i], 
+        |args| (args[0].as_int().unwrap() + args[1].as_int().unwrap()).into());
+    let solver = Solver::new(&ctx);
+    let two = Int::from_i64(&ctx, 2);
+    let four = Int::from_i64(&ctx, 4);
+    solver.assert(&plus.select_n(&[&two, &two])._eq(&four.clone().into()));
+    assert_eq!(solver.check(), SatResult::Sat);
+}
+
+#[test]
 fn test_solver_translate() {
     let cfg = Config::new();
     let source = Context::new(&cfg);
@@ -573,9 +599,9 @@ fn test_rec_func_def() {
 
     let x = ast::Int::new_const(&ctx, "x");
     let y = ast::Int::new_const(&ctx, "y");
-
+    
     let solver = Solver::new(&ctx);
-
+    
     solver.assert(
         &x._eq(
             &fac.apply(&[&ast::Int::from_i64(&ctx, 4).into()])

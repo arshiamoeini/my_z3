@@ -1506,6 +1506,16 @@ impl<'ctx> Array<'ctx> {
         }
     }
 
+    pub fn select_n(&self, indexs: &[&dyn Ast]) -> Dynamic<'ctx>
+    {
+        let indexs:Vec<_> = indexs.into_iter().map(|index| index.get_z3_ast()).collect();
+        unsafe {
+            Dynamic::wrap(self.ctx, {
+                Z3_mk_select_n(self.ctx.z3_ctx, self.z3_ast, indexs.len() as u32, indexs.as_ptr())
+            })
+        }
+    }
+
     /// Update the value at a given index in the array.
     ///
     /// Note that the `index` _must be_ of the array's `domain` sort,
@@ -1526,6 +1536,79 @@ impl<'ctx> Array<'ctx> {
                     value.get_z3_ast(),
                 )
             })
+        }
+    }
+
+    /// Create a lambda expression.
+    ///
+    /// It takes an expression `body` that contains bound variables of
+    /// the same sorts as the sorts listed in the array `sorts`. The
+    /// bound variables are de-Bruijn indices created using [`Dynamic::bound_varible`].
+    /// The array `names` contains the names that the quantified
+    /// formula uses for the bound variables. Z3 applies the convention
+    /// that the last element in the `names` and `sorts` array
+    /// refers to the variable with index `0`, the second to last element
+    /// of `names` and `sorts` refers to the variable with index `1`, etc.
+    ///
+    /// The sort of the resulting expression is `(Array sorts range)` where
+    /// `range` is the sort of `body`. For example, if the lambda binds two
+    /// variables of sort `Int` and `Bool`, and the `body` has sort `Real`,
+    /// the sort of the expression is `(Array Int Bool Real)`.
+    ///
+    /// - `ctx`: logical context
+    /// - `names`: names of the bound variables.
+    /// - `sorts`: the sorts of the bound variables.
+    /// - `body`: the body of the lambda expression.
+    pub fn lambda(ctx: &'ctx Context, names: &[Symbol], sorts: &[&Sort],
+        body: Dynamic<'ctx>) -> Self {
+        unsafe {
+            let num_decls = sorts.len();
+            assert_eq!(names.len(), num_decls);
+            let z3_sorts:Vec<_> = sorts.iter().
+                map(|sort| sort.z3_sort).collect();
+            let decl_names: Vec<Z3_symbol> = names.into_iter().map(|s| s.as_z3_symbol(ctx)).collect();
+            Self::wrap(ctx, Z3_mk_lambda(ctx.z3_ctx, 
+                    num_decls as u32, 
+                    z3_sorts.as_ptr(), 
+                    decl_names.as_ptr(), 
+                    body.z3_ast))
+        }
+    }
+    
+    /// Create a lambda expression.
+    ///
+    /// It takes an closure `body` that contains lambda functionality
+    /// It output is Array of domain `sorts` and range is `body` output sort
+    /// # Examples
+    /// ```
+    ///  let cfg = Config::new();
+    ///  let ctx = Context::new(&cfg);
+    ///  let solver = Solver::new(&ctx);
+    ///  let int = Sort::int(&ctx);
+    ///  let plus = ast::Array::mk_lambda(&ctx, &[&int, &int], 
+    ///    |args| (args[0].as_int().unwrap() + args[1].as_int().unwrap()).into());
+    ///  let two = Int::from_i64(&ctx, 2);
+    ///  let five = Int::from_i64(&ctx, 5);
+    ///  solver.assert(&plus.select_n(&[&two, &two])._eq(&five.into()));
+    ///  assert_eq!(solver.check(), SatResult::Unsat);
+    pub fn mk_lambda(ctx: &'ctx Context, sorts: &[&Sort],
+        body: impl Fn(&[Dynamic<'ctx>]) -> Dynamic<'ctx>) -> Self {
+        unsafe {
+            let num_decls = sorts.len();
+            let decl_names:Vec<_> = (0..num_decls).into_iter().
+                map(|id| Symbol::from(format!("$args{id}")).as_z3_symbol(ctx)).collect();
+            let bounds:Vec<_> = (0..num_decls).into_iter().
+                map(|index| 
+                    Dynamic::wrap(ctx, 
+                    Z3_mk_bound(ctx.z3_ctx, (num_decls - index - 1) as u32, sorts[index].z3_sort)
+                    )).collect();
+            let z3_sorts:Vec<_> = sorts.iter().
+                map(|sort| sort.z3_sort).collect();
+            Self::wrap(ctx, Z3_mk_lambda(ctx.z3_ctx, 
+                    num_decls as u32, 
+                    z3_sorts.as_ptr(), 
+                    decl_names.as_ptr(), 
+                    (body)(&bounds).z3_ast))
         }
     }
 }
@@ -1647,9 +1730,12 @@ impl<'ctx> Seq<'ctx> {
         }
     }
 
-    /// Creates a empty seq
+    /// Creates a empty seq of `sort`s
     pub fn empty(ctx: &'ctx Context, sort: &Sort<'ctx>) -> Seq<'ctx> {
-        unsafe { Self::wrap(ctx, Z3_mk_seq_empty(ctx.z3_ctx, sort.z3_sort)) }
+        unsafe { 
+            let seq_sort = Z3_mk_seq_sort(ctx.z3_ctx, sort.z3_sort);
+            return Self::wrap(ctx, Z3_mk_seq_empty(ctx.z3_ctx, seq_sort));
+         }
     }
 
     //Create a unit seq
@@ -1701,7 +1787,7 @@ impl<'ctx> Seq<'ctx> {
             })
         }
     }
-    
+ 
     varop! {
         /// Appends the argument seq to `Self`
         concat(Z3_mk_seq_concat, Seq<'ctx>);
@@ -1730,6 +1816,12 @@ impl<'ctx> Dynamic<'ctx> {
         }
     }
     
+    pub fn bound_varible(ctx: &'ctx Context, index: u8, sort: &Sort<'ctx>) -> Dynamic<'ctx> {
+        unsafe {
+            Self::wrap(ctx, Z3_mk_bound(ctx.z3_ctx, index as u32, sort.z3_sort))
+        }
+    }
+
     pub fn from_ast(ast: &dyn Ast<'ctx>) -> Self {
         unsafe { Self::wrap(ast.get_ctx(), ast.get_z3_ast()) }
     }
