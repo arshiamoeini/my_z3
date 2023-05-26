@@ -21,6 +21,8 @@ use num::bigint::BigInt;
 #[cfg(feature = "arbitrary-size-numeral")]
 use num::rational::BigRational;
 
+
+
 /// [`Ast`] node representing a boolean value.
 pub struct Bool<'ctx> {
     pub(crate) ctx: &'ctx Context,
@@ -690,7 +692,7 @@ impl<'ctx> Bool<'ctx> {
             })
         }
     }
-
+  
     varop! {
         and(Z3_mk_and, Self);
         or(Z3_mk_or, Self);
@@ -1539,26 +1541,28 @@ impl<'ctx> Array<'ctx> {
         }
     }
 
-    /// Create a lambda expression.
-    ///
-    /// It takes an expression `body` that contains bound variables of
-    /// the same sorts as the sorts listed in the array `sorts`. The
-    /// bound variables are de-Bruijn indices created using [`Dynamic::bound_varible`].
-    /// The array `names` contains the names that the quantified
-    /// formula uses for the bound variables. Z3 applies the convention
-    /// that the last element in the `names` and `sorts` array
-    /// refers to the variable with index `0`, the second to last element
-    /// of `names` and `sorts` refers to the variable with index `1`, etc.
-    ///
-    /// The sort of the resulting expression is `(Array sorts range)` where
-    /// `range` is the sort of `body`. For example, if the lambda binds two
-    /// variables of sort `Int` and `Bool`, and the `body` has sort `Real`,
-    /// the sort of the expression is `(Array Int Bool Real)`.
-    ///
-    /// - `ctx`: logical context
-    /// - `names`: names of the bound variables.
-    /// - `sorts`: the sorts of the bound variables.
-    /// - `body`: the body of the lambda expression.
+    /**
+    Create a lambda expression.
+
+    It takes an expression `body` that contains bound variables of
+    the same sorts as the sorts listed in the array `sorts`. The
+    bound variables are de-Bruijn indices created using [`Dynamic::bound_varible`].
+    The array `names` contains the names that the quantified
+    formula uses for the bound variables. Z3 applies the convention
+    that the last element in the `names` and `sorts` array
+    refers to the variable with index `0`, the second to last element
+    of `names` and `sorts` refers to the variable with index `1`, etc.
+
+    The sort of the resulting expression is `(Array sorts range)` where
+    `range` is the sort of `body`. For example, if the lambda binds two
+    variables of sort `Int` and `Bool`, and the `body` has sort `Real`,
+    the sort of the expression is `(Array Int Bool Real)`.
+
+    - `ctx`: logical context
+    - `names`: names of the bound variables.
+    - `sorts`: the sorts of the bound variables.
+    - `body`: the body of the lambda expression.
+    */
     pub fn lambda(ctx: &'ctx Context, names: &[Symbol], sorts: &[&Sort],
         body: Dynamic<'ctx>) -> Self {
         unsafe {
@@ -1575,22 +1579,27 @@ impl<'ctx> Array<'ctx> {
         }
     }
     
-    /// Create a lambda expression.
-    ///
-    /// It takes an closure `body` that contains lambda functionality
-    /// It output is Array of domain `sorts` and range is `body` output sort
-    /// # Examples
-    /// ```
-    ///  let cfg = Config::new();
-    ///  let ctx = Context::new(&cfg);
-    ///  let solver = Solver::new(&ctx);
-    ///  let int = Sort::int(&ctx);
-    ///  let plus = ast::Array::mk_lambda(&ctx, &[&int, &int], 
-    ///    |args| (args[0].as_int().unwrap() + args[1].as_int().unwrap()).into());
-    ///  let two = Int::from_i64(&ctx, 2);
-    ///  let five = Int::from_i64(&ctx, 5);
-    ///  solver.assert(&plus.select_n(&[&two, &two])._eq(&five.into()));
-    ///  assert_eq!(solver.check(), SatResult::Unsat);
+    /**
+    Create a lambda expression.
+
+    It takes an closure `body` that contains lambda functionality
+    It output is Array of domain `sorts` and range is `body` output sort
+    # Examples
+    ```
+    # use z3::{ast, Config, Context, FuncDecl, SatResult, Solver, Sort, Symbol, Pattern};
+    # use z3::ast::Ast;
+    # use std::convert::TryInto;
+    # let cfg = Config::new();
+    # let ctx = Context::new(&cfg);
+    # let solver = Solver::new(&ctx);
+     let int = Sort::int(&ctx);
+     let plus = ast::Array::mk_lambda(&ctx, &[&int, &int], 
+       |args| (args[0].as_int().unwrap() + args[1].as_int().unwrap()).into());
+     let two = ast::Int::from_i64(&ctx, 2);
+     let five = ast::Int::from_i64(&ctx, 5);
+     solver.assert(&plus.select_n(&[&two, &two])._eq(&five.into()));
+     assert_eq!(solver.check(), SatResult::Unsat);
+    */
     pub fn mk_lambda(ctx: &'ctx Context, sorts: &[&Sort],
         body: impl Fn(&[Dynamic<'ctx>]) -> Dynamic<'ctx>) -> Self {
         unsafe {
