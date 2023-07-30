@@ -1578,8 +1578,7 @@ impl<'ctx> Array<'ctx> {
             let num_decls = sorts.len();
             assert_eq!(names.len(), num_decls);
             let z3_sorts: Vec<_> = sorts.iter().map(|sort| sort.z3_sort).collect();
-            let decl_names: Vec<Z3_symbol> =
-                names.iter().map(|s| s.as_z3_symbol(ctx)).collect();
+            let decl_names: Vec<Z3_symbol> = names.iter().map(|s| s.as_z3_symbol(ctx)).collect();
             Self::wrap(
                 ctx,
                 Z3_mk_lambda(
