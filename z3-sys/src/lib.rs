@@ -3099,6 +3099,9 @@ extern "C" {
     /// Return the length of the sequence `s`.
     pub fn Z3_mk_seq_length(c: Z3_context, s: Z3_ast) -> Z3_ast;
 
+    /// Retrieve from `s` the element positioned at position `index`. The function is under-specified if the index is out of bounds. In other words, it is treated as a fresh variable.
+    pub fn Z3_mk_seq_nth(c: Z3_context, s: Z3_ast, index: Z3_ast) -> Z3_ast;
+
     /// Return index of first occurrence of `substr` in `s` starting from offset `offset`.
     /// If `s` does not contain `substr`, then the value is -1, if `offset` is the length of `s`, then the value is -1 as well.
     /// The function is under-specified if `offset` is negative or larger than the length of `s`.

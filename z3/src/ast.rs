@@ -21,8 +21,6 @@ use num::bigint::BigInt;
 #[cfg(feature = "arbitrary-size-numeral")]
 use num::rational::BigRational;
 
-
-
 /// [`Ast`] node representing a boolean value.
 pub struct Bool<'ctx> {
     pub(crate) ctx: &'ctx Context,
@@ -692,7 +690,7 @@ impl<'ctx> Bool<'ctx> {
             })
         }
     }
-  
+
     varop! {
         and(Z3_mk_and, Self);
         or(Z3_mk_or, Self);
@@ -1511,12 +1509,16 @@ impl<'ctx> Array<'ctx> {
         }
     }
 
-    pub fn select_n(&self, indexs: &[&dyn Ast]) -> Dynamic<'ctx>
-    {
-        let indexs:Vec<_> = indexs.into_iter().map(|index| index.get_z3_ast()).collect();
+    pub fn select_n(&self, indexs: &[&dyn Ast]) -> Dynamic<'ctx> {
+        let indexs: Vec<_> = indexs.iter().map(|index| index.get_z3_ast()).collect();
         unsafe {
             Dynamic::wrap(self.ctx, {
-                Z3_mk_select_n(self.ctx.z3_ctx, self.z3_ast, indexs.len() as u32, indexs.as_ptr())
+                Z3_mk_select_n(
+                    self.ctx.z3_ctx,
+                    self.z3_ast,
+                    indexs.len() as u32,
+                    indexs.as_ptr(),
+                )
             })
         }
     }
@@ -1566,22 +1568,31 @@ impl<'ctx> Array<'ctx> {
     - `sorts`: the sorts of the bound variables.
     - `body`: the body of the lambda expression.
     */
-    pub fn lambda(ctx: &'ctx Context, names: &[Symbol], sorts: &[&Sort],
-        body: Dynamic<'ctx>) -> Self {
+    pub fn lambda(
+        ctx: &'ctx Context,
+        names: &[Symbol],
+        sorts: &[&Sort],
+        body: Dynamic<'ctx>,
+    ) -> Self {
         unsafe {
             let num_decls = sorts.len();
             assert_eq!(names.len(), num_decls);
-            let z3_sorts:Vec<_> = sorts.iter().
-                map(|sort| sort.z3_sort).collect();
-            let decl_names: Vec<Z3_symbol> = names.into_iter().map(|s| s.as_z3_symbol(ctx)).collect();
-            Self::wrap(ctx, Z3_mk_lambda(ctx.z3_ctx, 
-                    num_decls as u32, 
-                    z3_sorts.as_ptr(), 
-                    decl_names.as_ptr(), 
-                    body.z3_ast))
+            let z3_sorts: Vec<_> = sorts.iter().map(|sort| sort.z3_sort).collect();
+            let decl_names: Vec<Z3_symbol> =
+                names.iter().map(|s| s.as_z3_symbol(ctx)).collect();
+            Self::wrap(
+                ctx,
+                Z3_mk_lambda(
+                    ctx.z3_ctx,
+                    num_decls as u32,
+                    z3_sorts.as_ptr(),
+                    decl_names.as_ptr(),
+                    body.z3_ast,
+                ),
+            )
         }
     }
-    
+
     /**
     Create a lambda expression.
 
@@ -1596,31 +1607,48 @@ impl<'ctx> Array<'ctx> {
     # let ctx = Context::new(&cfg);
     # let solver = Solver::new(&ctx);
      let int = Sort::int(&ctx);
-     let plus = ast::Array::mk_lambda(&ctx, &[&int, &int], 
+     let plus = ast::Array::mk_lambda(&ctx, &[&int, &int],
        |args| (args[0].as_int().unwrap() + args[1].as_int().unwrap()).into());
      let two = ast::Int::from_i64(&ctx, 2);
      let five = ast::Int::from_i64(&ctx, 5);
      solver.assert(&plus.select_n(&[&two, &two])._eq(&five.into()));
      assert_eq!(solver.check(), SatResult::Unsat);
     */
-    pub fn mk_lambda(ctx: &'ctx Context, sorts: &[&Sort],
-        body: impl Fn(&[Dynamic<'ctx>]) -> Dynamic<'ctx>) -> Self {
+    pub fn mk_lambda(
+        ctx: &'ctx Context,
+        sorts: &[&Sort],
+        body: impl Fn(&[Dynamic<'ctx>]) -> Dynamic<'ctx>,
+    ) -> Self {
         unsafe {
             let num_decls = sorts.len();
-            let decl_names:Vec<_> = (0..num_decls).into_iter().
-                map(|id| Symbol::from(format!("$args{id}")).as_z3_symbol(ctx)).collect();
-            let bounds:Vec<_> = (0..num_decls).into_iter().
-                map(|index| 
-                    Dynamic::wrap(ctx, 
-                    Z3_mk_bound(ctx.z3_ctx, (num_decls - index - 1) as u32, sorts[index].z3_sort)
-                    )).collect();
-            let z3_sorts:Vec<_> = sorts.iter().
-                map(|sort| sort.z3_sort).collect();
-            Self::wrap(ctx, Z3_mk_lambda(ctx.z3_ctx, 
-                    num_decls as u32, 
-                    z3_sorts.as_ptr(), 
-                    decl_names.as_ptr(), 
-                    (body)(&bounds).z3_ast))
+            let decl_names: Vec<_> = (0..num_decls)
+                .into_iter()
+                .map(|id| Symbol::from(format!("$args{id}")).as_z3_symbol(ctx))
+                .collect();
+            let bounds: Vec<_> = (0..num_decls)
+                .into_iter()
+                .map(|index| {
+                    Dynamic::wrap(
+                        ctx,
+                        Z3_mk_bound(
+                            ctx.z3_ctx,
+                            (num_decls - index - 1) as u32,
+                            sorts[index].z3_sort,
+                        ),
+                    )
+                })
+                .collect();
+            let z3_sorts: Vec<_> = sorts.iter().map(|sort| sort.z3_sort).collect();
+            Self::wrap(
+                ctx,
+                Z3_mk_lambda(
+                    ctx.z3_ctx,
+                    num_decls as u32,
+                    z3_sorts.as_ptr(),
+                    decl_names.as_ptr(),
+                    (body)(&bounds).z3_ast,
+                ),
+            )
         }
     }
 }
@@ -1721,7 +1749,11 @@ impl<'ctx> Set<'ctx> {
     }
 }
 impl<'ctx> Seq<'ctx> {
-    pub fn new_const<S: Into<Symbol>>(ctx: &'ctx Context, name: S, eltype: &Sort<'ctx>) -> Seq<'ctx> {
+    pub fn new_const<S: Into<Symbol>>(
+        ctx: &'ctx Context,
+        name: S,
+        eltype: &Sort<'ctx>,
+    ) -> Seq<'ctx> {
         let sort = Sort::seq(ctx, eltype);
         unsafe {
             Self::wrap(ctx, {
@@ -1744,22 +1776,22 @@ impl<'ctx> Seq<'ctx> {
 
     /// Creates a empty seq of `sort`s
     pub fn empty(ctx: &'ctx Context, sort: &Sort<'ctx>) -> Seq<'ctx> {
-        unsafe { 
+        unsafe {
             let seq_sort = Z3_mk_seq_sort(ctx.z3_ctx, sort.z3_sort);
-            return Self::wrap(ctx, Z3_mk_seq_empty(ctx.z3_ctx, seq_sort));
-         }
+            Self::wrap(ctx, Z3_mk_seq_empty(ctx.z3_ctx, seq_sort))
+        }
     }
 
     //Create a unit seq
     pub fn unit(ctx: &'ctx Context, elem: &dyn Ast<'ctx>) -> Seq<'ctx> {
-        unsafe { Self::wrap(ctx, Z3_mk_seq_unit(ctx.z3_ctx, elem.get_z3_ast()))}
+        unsafe { Self::wrap(ctx, Z3_mk_seq_unit(ctx.z3_ctx, elem.get_z3_ast())) }
     }
 
     /// Extract subsequence starting at `offset` of `length` from `Self`
     pub fn subsequance(&self, offset: Int<'ctx>, length: Int<'ctx>) -> Seq<'ctx> {
         unsafe {
-            <Seq<'ctx> >::wrap(self.ctx,{
-                Z3_mk_seq_extract(self.ctx.z3_ctx, self.z3_ast,offset.z3_ast, length.z3_ast)
+            <Seq<'ctx>>::wrap(self.ctx, {
+                Z3_mk_seq_extract(self.ctx.z3_ctx, self.z3_ast, offset.z3_ast, length.z3_ast)
             })
         }
     }
@@ -1767,25 +1799,31 @@ impl<'ctx> Seq<'ctx> {
     /// Replace the first occurrence of `a` with `b` in `Self`
     /// A should be sort of element of 'Self'
     pub fn replace<A>(&self, a: &A, b: &A) -> Seq<'ctx>
-    where 
+    where
         A: Ast<'ctx>,
     {
         unsafe {
-            <Seq<'ctx> >::wrap(self.ctx,{
+            <Seq<'ctx>>::wrap(self.ctx, {
                 Z3_mk_seq_replace(self.ctx.z3_ctx, self.z3_ast, a.get_z3_ast(), b.get_z3_ast())
             })
         }
     }
-    /// Get the value at a given index in the seq.
-    pub fn at(&self, index: &Int<'ctx>) -> Dynamic<'ctx>
-    {
+    /// Get the value at a given index in the unit seq.
+    pub fn at(&self, index: &Int<'ctx>) -> Dynamic<'ctx> {
         unsafe {
             Dynamic::wrap(self.ctx, {
                 Z3_mk_seq_at(self.ctx.z3_ctx, self.z3_ast, index.get_z3_ast())
             })
         }
     }
-
+    /// Get the value at a given index
+    pub fn nth(&self, index: &Int<'ctx>) -> Dynamic<'ctx> {
+        unsafe {
+            Dynamic::wrap(self.ctx, {
+                Z3_mk_seq_nth(self.ctx.z3_ctx, self.z3_ast, index.get_z3_ast())
+            })
+        }
+    }
     /// Return index of first occurrence of `a` in `Self` starting from `offset`
     /// If `Self` from 'offset' does not contain `a`, then the value is -1, if `offset` is the length of `Self`, then the value is -1 as well
     /// The function is under-specified if `offset` is negative or larger than the length of `Self`.
@@ -1795,11 +1833,16 @@ impl<'ctx> Seq<'ctx> {
     {
         unsafe {
             Int::wrap(self.ctx, {
-                Z3_mk_seq_index(self.ctx.z3_ctx, self.get_z3_ast(), a.get_z3_ast(), offset.get_z3_ast())
+                Z3_mk_seq_index(
+                    self.ctx.z3_ctx,
+                    self.get_z3_ast(),
+                    a.get_z3_ast(),
+                    offset.get_z3_ast(),
+                )
             })
         }
     }
- 
+
     varop! {
         /// Appends the argument seq to `Self`
         concat(Z3_mk_seq_concat, Seq<'ctx>);
@@ -1827,11 +1870,9 @@ impl<'ctx> Dynamic<'ctx> {
             })
         }
     }
-    
+
     pub fn bound_varible(ctx: &'ctx Context, index: u8, sort: &Sort<'ctx>) -> Dynamic<'ctx> {
-        unsafe {
-            Self::wrap(ctx, Z3_mk_bound(ctx.z3_ctx, index as u32, sort.z3_sort))
-        }
+        unsafe { Self::wrap(ctx, Z3_mk_bound(ctx.z3_ctx, index as u32, sort.z3_sort)) }
     }
 
     pub fn from_ast(ast: &dyn Ast<'ctx>) -> Self {

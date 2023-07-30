@@ -4,7 +4,10 @@ use Config;
 use Context;
 use ContextHandle;
 
-use crate::{Symbol, Sort, FuncDecl, ast::{Bool, self, Ast}};
+use crate::{
+    ast::{self, Ast, Bool},
+    FuncDecl, Sort, Symbol,
+};
 
 impl Context {
     pub fn new(cfg: &Config) -> Context {
@@ -54,7 +57,7 @@ impl Context {
     pub fn update_bool_param_value(&mut self, k: &str, v: bool) {
         self.update_param_value(k, if v { "true" } else { "false" })
     }
-    
+
     /**
        Parse a `sentence` in SMT 2.0 format.
 
@@ -66,33 +69,46 @@ impl Context {
     - `decls`: a slice of references to `FuncDecl` objects representing the function declarations used in the sentence.
     # Examples
     ```
-    # use z3::{ast, Config, Context, FuncDecl, Sort}; 
+    # use z3::{ast, Config, Context, FuncDecl, Sort};
     # use z3::ast::Ast;
      let cfg = Config::new();
      let ctx = Context::new(&cfg);
 
      let x = ast::Int::fresh_const(&ctx, "x");
      let y = ast::Int::fresh_const(&ctx, "y");
-     
+
      let int = Sort::int(&ctx);
      let f = FuncDecl::new(&ctx, "f", &[&int], &int);
      let probs = ctx.from_string("(assert (> (+ foo (g bar)) 0))", &[], &[], &["foo", "bar", "g"], &[&x.decl(), &y.decl(), &f]);
-       
-     assert_eq!(probs.first().unwrap(), &(x + f.apply(&[&y]).as_int().unwrap()).gt(&ast::Int::from_i64(&ctx, 0)));    
+
+     assert_eq!(probs.first().unwrap(), &(x + f.apply(&[&y]).as_int().unwrap()).gt(&ast::Int::from_i64(&ctx, 0)));
     */
-    pub fn from_string<T: Into<Vec<u8>>, S: Into<Symbol> + Clone>(&self, sentence: T, sort_names: &[S], sorts: &[&Sort], decl_names: &[S], decls: &[&FuncDecl]) -> Vec<Bool> {
+    pub fn from_string<T: Into<Vec<u8>>, S: Into<Symbol> + Clone>(
+        &self,
+        sentence: T,
+        sort_names: &[S],
+        sorts: &[&Sort],
+        decl_names: &[S],
+        decls: &[&FuncDecl],
+    ) -> Vec<Bool> {
         let str = CString::new(sentence).unwrap();
 
         let z3_vec = unsafe {
-            let sort_names:Vec<_> = sort_names.iter().map(|s|
-                (*s).clone().into().as_z3_symbol(self)).collect();
-            let decl_names:Vec<_> = decl_names.into_iter().map(|s| s.clone().into().as_z3_symbol(self)).collect();
-            let sorts:Vec<_> = sorts.into_iter().map(|s| s.z3_sort).collect();
-            let decls:Vec<_> = decls.into_iter().map(|x| x.z3_func_decl).collect();
-            Z3_parse_smtlib2_string(self.z3_ctx, 
+            let sort_names: Vec<_> = sort_names
+                .iter()
+                .map(|s| (*s).clone().into().as_z3_symbol(self))
+                .collect();
+            let decl_names: Vec<_> = decl_names
+                .iter()
+                .map(|s| s.clone().into().as_z3_symbol(self))
+                .collect();
+            let sorts: Vec<_> = sorts.iter().map(|s| s.z3_sort).collect();
+            let decls: Vec<_> = decls.iter().map(|x| x.z3_func_decl).collect();
+            Z3_parse_smtlib2_string(
+                self.z3_ctx,
                 str.as_ptr(),
-                sort_names.len() as u32, 
-                sort_names.as_ptr(), 
+                sort_names.len() as u32,
+                sort_names.as_ptr(),
                 sorts.as_ptr(),
                 decl_names.len() as u32,
                 decl_names.as_ptr(),
